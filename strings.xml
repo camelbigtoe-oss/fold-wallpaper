@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fold Wallpaper</string>
+    <string name="wp_desc">Cycles comic images, with a different picture on the main and cover screens.</string>
+</resources>
