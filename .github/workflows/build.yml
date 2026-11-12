@@ -1,0 +1,62 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Arrange files (when uploaded flat through the website)
+        run: |
+          if [ -f app.build.gradle.kts ]; then
+            mkdir -p app/src/main/java/nz/luke/foldwallpaper app/src/main/res/xml app/src/main/res/values app/src/main/res/drawable keystore
+            mv app.build.gradle.kts app/build.gradle.kts
+            mv AndroidManifest.xml app/src/main/
+            mv *.kt app/src/main/java/nz/luke/foldwallpaper/
+            mv wallpaper.xml app/src/main/res/xml/
+            mv strings.xml app/src/main/res/values/
+            mv ic_launcher.xml app/src/main/res/drawable/
+          fi
+      - name: Create signing key on first build (kept so updates install over the old app)
+        run: |
+          if [ ! -f keystore/release.jks ]; then
+            mkdir -p keystore
+            keytool -genkeypair -keystore keystore/release.jks -storetype PKCS12 \
+              -storepass foldwall -keypass foldwall -alias foldwall -keyalg RSA \
+              -keysize 2048 -validity 10000 -dname "CN=Fold Wallpaper"
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add -f keystore/release.jks
+            git commit -m "Add signing key [skip ci]"
+            git push origin HEAD:main
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Build
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk FoldWallpaper.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FoldWallpaper-apk
+          path: FoldWallpaper.apk
+      - name: Publish release (direct APK download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" FoldWallpaper.apk \
+            --title "Fold Wallpaper build ${{ github.run_number }}" \
+            --notes "Download FoldWallpaper.apk below and open it on your phone to install." \
+            --latest
